@@ -1,0 +1,16 @@
+services:
+  cloudman:
+    build: .
+    image: cloudman:latest
+    container_name: cloudman
+    ports:
+      - "7681:7681"
+    environment:
+      WEB_USER: admin
+      WEB_PASS: ${WEB_PASS:?Set WEB_PASS, e.g. WEB_PASS=yourpassword docker compose up -d}
+    volumes:
+      - cloudman-home:/home/cloudman   # keeps your files across restarts
+    restart: unless-stopped
+
+volumes:
+  cloudman-home:
