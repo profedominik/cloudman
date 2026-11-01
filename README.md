@@ -2,14 +2,32 @@
 
 A Linux shell in your web browser. One Docker container runs
 [ttyd](https://github.com/tsl0922/ttyd), which serves a real `bash` terminal
-over HTTP/WebSocket behind a username/password login.
+over HTTP/WebSocket, plus a small file manager for uploads and downloads.
+Both sit behind the same username/password login.
 
-![screenshot](docs/screenshot.png)
+![terminal](docs/screenshot.png)
+
+## Moving files in and out
+
+**File manager** at <http://localhost:7682>:
+
+- Browse your home folder
+- Upload with the button or by dragging files onto the list (with progress bars)
+- Download any file, or a whole folder as a zip
+- Create folders and delete files
+
+![file manager](docs/files.png)
+
+**From the terminal** (ZMODEM, built into the web terminal):
+
+- `sz myfile.txt` downloads the file to your browser
+- `rz` shows a "choose files" button and uploads what you pick into the current folder
 
 ## What's inside
 
 - Ubuntu base (`mcr.microsoft.com/devcontainers/base:ubuntu`) with git, curl, zsh
-- ttyd, tmux, htop, vim, nano, ssh client, rsync, ping
+- ttyd, tmux, htop, vim, nano, ssh client, rsync, ping, lrzsz (`sz`/`rz`)
+- File manager: `files/server.py` (Python standard library only) and `files/index.html`
 - Login user `cloudman` with passwordless `sudo`
 - Home directory on a Docker volume, so files survive restarts
 
@@ -25,7 +43,7 @@ Or with plain Docker:
 
 ```bash
 docker build -t cloudman .
-docker run -d --name cloudman -p 7681:7681 -e WEB_USER=admin -e WEB_PASS=choose-a-strong-password cloudman
+docker run -d --name cloudman -p 7681:7681 -p 7682:7682 -e WEB_USER=admin -e WEB_PASS=choose-a-strong-password cloudman
 ```
 
 Open <http://localhost:7681> and log in as `admin` with your password.
@@ -38,14 +56,24 @@ generated and printed in `docker logs cloudman`.
 |------------|------------|-----------------------------|
 | `WEB_USER` | `admin`    | Login name for the web page |
 | `WEB_PASS` | (random)   | Login password              |
-| `PORT`     | `7681`     | Port inside the container   |
+| `PORT`     | `7681`     | Terminal port inside the container |
+| `FILES_PORT` | `7682`   | File manager port inside the container |
+| `FILES_ENABLED` | `1`   | Set to `0` to turn the file manager off |
 
 ## Security notes
 
 Anyone who logs in gets a root-capable shell. Basic auth over plain HTTP sends
 the password unencrypted, so for anything outside your own machine or LAN put it
 behind HTTPS (a reverse proxy such as Caddy or Traefik, or a Cloudflare/Tailscale
-tunnel). Don't expose port 7681 straight to the internet.
+tunnel). Don't expose ports 7681 or 7682 straight to the internet.
+
+The file manager runs as the `cloudman` user, can only reach `/home/cloudman`
+(paths that try to escape it are refused), and its write actions require a
+custom header so other websites can't trigger them from your browser.
+
+The terminal page's "Open terminal" link assumes the terminal is on port 7681 of
+the same host. Behind a tunnel or reverse proxy with other hostnames, open the
+terminal's own address instead.
 
 ## Building behind a TLS-intercepting proxy
 

@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cloudman files</title>
+<style>
+  /* Layout: one column; toolbar + breadcrumb on top, drop zone wraps the file table. */
+  :root {
+    --bg: #f6f8fa; --panel: #ffffff; --fg: #1f2328; --muted: #59636e;
+    --line: #d1d9e0; --accent: #0969da; --accent-fg: #ffffff; --hover: #eef2f6;
+    --ok: #1a7f37; --bad: #cf222e; --drop: rgba(9, 105, 218, .08);
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, sans-serif;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117; --panel: #151b23; --fg: #e6edf3; --muted: #9198a1;
+      --line: #2f3742; --accent: #58a6ff; --accent-fg: #0d1117; --hover: #1c2430;
+      --ok: #3fb950; --bad: #f85149; --drop: rgba(88, 166, 255, .10);
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.5 var(--sans); }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 20px 16px 48px; display: grid; gap: 14px; }
+  header { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; justify-content: space-between; }
+  .brand { font: 600 16px/1 var(--mono); letter-spacing: .02em; display: flex; align-items: center; gap: 8px; }
+  .brand::before { content: "$"; color: var(--accent); }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  button, .btn {
+    font: 500 13px/1 var(--sans); border: 1px solid var(--line); background: var(--panel); color: var(--fg);
+    padding: 8px 12px; border-radius: 6px; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 6px;
+  }
+  button:hover, .btn:hover { background: var(--hover); }
+  button:focus-visible, .btn:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+  .primary:hover { background: var(--accent); filter: brightness(1.08); }
+  .crumbs { font: 13px/1.4 var(--mono); color: var(--muted); display: flex; flex-wrap: wrap; gap: 2px; align-items: center; min-width: 0; }
+  .crumbs a { color: var(--accent); text-decoration: none; padding: 2px 4px; border-radius: 4px; }
+  .crumbs a:hover { background: var(--hover); }
+  .crumbs span.sep { opacity: .6; }
+  .box { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; position: relative; }
+  .box.dragging { outline: 2px dashed var(--accent); outline-offset: -6px; background: var(--drop); }
+  .scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th { text-align: left; font: 500 12px/1 var(--sans); color: var(--muted); padding: 10px 14px; border-bottom: 1px solid var(--line); letter-spacing: .02em; }
+  td { padding: 8px 14px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  tr:last-child td { border-bottom: 0; }
+  tbody tr:hover { background: var(--hover); }
+  td.name { width: 100%; max-width: 0; overflow: hidden; text-overflow: ellipsis; font-family: var(--mono); font-size: 13px; }
+  td.name a { color: var(--fg); text-decoration: none; }
+  td.name a:hover { color: var(--accent); text-decoration: underline; }
+  .ico { display: inline-block; width: 1.4em; color: var(--muted); }
+  .dir .ico { color: var(--accent); }
+  td.num, th.num { text-align: right; color: var(--muted); }
+  td.act { text-align: right; }
+  td.act button { padding: 5px 8px; font-size: 12px; }
+  .del:hover { color: var(--bad); border-color: var(--bad); }
+  .empty { padding: 36px 16px; text-align: center; color: var(--muted); }
+  .hint { color: var(--muted); font-size: 12px; margin: 0; }
+  .uploads { display: grid; gap: 6px; }
+  .up { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 8px 12px; display: grid; gap: 6px; font-size: 12px; }
+  .up-row { display: flex; justify-content: space-between; gap: 12px; min-width: 0; }
+  .up-name { font-family: var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .bar { height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; }
+  .bar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .15s; }
+  .up.done .bar > i { background: var(--ok); }
+  .up.err { border-color: var(--bad); }
+  .up.err .up-state { color: var(--bad); }
+  .toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 8px 14px; border-radius: 6px; font-size: 13px; max-width: calc(100% - 32px); }
+  dialog { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--fg); padding: 18px; width: min(380px, calc(100% - 32px)); }
+  dialog::backdrop { background: rgba(0,0,0,.4); }
+  dialog form { display: grid; gap: 12px; }
+  dialog input { font: 14px var(--mono); padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); width: 100%; }
+  dialog .row { display: flex; gap: 8px; justify-content: flex-end; }
+  @media (max-width: 560px) { .hide-sm { display: none; } }
+  @media (prefers-reduced-motion: reduce) { .bar > i { transition: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">cloudman files</div>
+    <div class="actions">
+      <button class="primary" id="upload-btn" type="button">Upload files</button>
+      <button id="mkdir-btn" type="button">New folder</button>
+      <button id="zip-btn" type="button" title="Download this folder as a zip">Download folder</button>
+      <a class="btn" id="term-link" href="#">Open terminal</a>
+    </div>
+  </header>
+
+  <nav class="crumbs" id="crumbs" aria-label="Folder path"></nav>
+
+  <div class="box" id="drop">
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Name</th><th class="num hide-sm">Size</th><th class="num hide-sm">Modified</th><th class="num"><span class="hide-sm">Actions</span></th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <div class="empty" id="empty" hidden>This folder is empty. Drop files here or use Upload files.</div>
+  </div>
+  <p class="hint">Tip: drag files anywhere onto the list to upload them into the current folder. In the terminal, <code>sz file</code> sends a file to your browser and <code>rz</code> asks for one.</p>
+
+  <div class="uploads" id="uploads"></div>
+</div>
+
+<input type="file" id="file-input" multiple hidden>
+
+<dialog id="mkdir-dialog">
+  <form method="dialog" id="mkdir-form">
+    <label for="mkdir-name">Folder name</label>
+    <input id="mkdir-name" autocomplete="off" required>
+    <div class="row">
+      <button value="cancel" type="button" id="mkdir-cancel">Cancel</button>
+      <button class="primary" value="ok" type="submit">Create</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="del-dialog">
+  <form method="dialog" id="del-form">
+    <p id="del-text" style="margin:0"></p>
+    <div class="row">
+      <button type="button" id="del-cancel">Cancel</button>
+      <button class="primary" type="submit" style="background:var(--bad);border-color:var(--bad)">Delete</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const W = { 'X-Cloudman': '1' };
+  let cwd = decodeURIComponent(location.hash.slice(1));
+
+  $('term-link').href = `${location.protocol}//${location.hostname}:7681/`;
+
+  const fmtSize = (n) => {
+    if (n < 1024) return n + ' B';
+    const u = ['KB', 'MB', 'GB', 'TB']; let i = -1;
+    do { n /= 1024; i++; } while (n >= 1024 && i < u.length - 1);
+    return (n < 10 ? n.toFixed(1) : Math.round(n)) + ' ' + u[i];
+  };
+  const fmtTime = (s) => new Date(s * 1000).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+  const join = (a, b) => (a ? a + '/' : '') + b;
+  const api = (route, params) => route + '?' + new URLSearchParams(params);
+
+  let toastTimer;
+  function toast(msg) {
+    let t = document.querySelector('.toast');
+    if (!t) { t = document.createElement('div'); t.className = 'toast'; t.setAttribute('role', 'status'); document.body.appendChild(t); }
+    t.textContent = msg; t.hidden = false;
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 3000);
+  }
+
+  function crumbs() {
+    const nav = $('crumbs'); nav.replaceChildren();
+    const parts = cwd ? cwd.split('/') : [];
+    const add = (label, path) => {
+      const a = document.createElement('a'); a.href = '#' + encodeURIComponent(path); a.textContent = label; nav.appendChild(a);
+    };
+    add('~', '');
+    parts.forEach((p, i) => {
+      const s = document.createElement('span'); s.className = 'sep'; s.textContent = '/'; nav.appendChild(s);
+      add(p, parts.slice(0, i + 1).join('/'));
+    });
+  }
+
+  async function load() {
+    crumbs();
+    const r = await fetch(api('/api/list', { path: cwd }));
+    const data = await r.json();
+    if (!r.ok) { toast(data.error || 'Could not open that folder'); if (cwd) { location.hash = ''; } return; }
+    const tb = $('rows'); tb.replaceChildren();
+    $('empty').hidden = data.items.length > 0;
+    for (const it of data.items) {
+      const path = join(cwd, it.name);
+      const tr = document.createElement('tr'); if (it.dir) tr.className = 'dir';
+      const name = document.createElement('td'); name.className = 'name';
+      const ico = document.createElement('span'); ico.className = 'ico'; ico.textContent = it.dir ? '▸' : '·';
+      const a = document.createElement('a');
+      a.textContent = it.name + (it.dir ? '/' : '');
+      a.href = it.dir ? '#' + encodeURIComponent(path) : api('/api/download', { path });
+      a.title = it.dir ? 'Open folder' : 'Download';
+      name.append(ico, a);
+      const size = document.createElement('td'); size.className = 'num hide-sm'; size.textContent = it.dir ? '—' : fmtSize(it.size);
+      const mod = document.createElement('td'); mod.className = 'num hide-sm'; mod.textContent = fmtTime(it.mtime);
+      const act = document.createElement('td'); act.className = 'act';
+      const dl = document.createElement('button'); dl.type = 'button'; dl.textContent = it.dir ? 'Zip' : 'Download';
+      dl.addEventListener('click', () => { location.href = api('/api/download', { path }); });
+      const del = document.createElement('button'); del.type = 'button'; del.className = 'del'; del.textContent = 'Delete';
+      del.addEventListener('click', () => askDelete(path, it.dir));
+      act.append(dl, ' ', del);
+      tr.append(name, size, mod, act);
+      tb.appendChild(tr);
+    }
+  }
+
+  function upload(file) {
+    const row = document.createElement('div'); row.className = 'up';
+    const top = document.createElement('div'); top.className = 'up-row';
+    const nm = document.createElement('span'); nm.className = 'up-name'; nm.textContent = join(cwd, file.name);
+    const st = document.createElement('span'); st.className = 'up-state'; st.textContent = '0%';
+    top.append(nm, st);
+    const bar = document.createElement('div'); bar.className = 'bar'; const fill = document.createElement('i'); bar.appendChild(fill);
+    row.append(top, bar); $('uploads').prepend(row);
+    const dir = cwd;
+    return new Promise((resolve) => {
+      const x = new XMLHttpRequest();
+      x.open('PUT', api('/api/upload', { path: dir, name: file.name }));
+      x.setRequestHeader('X-Cloudman', '1');
+      x.upload.onprogress = (e) => { if (e.lengthComputable) { const p = Math.round(e.loaded / e.total * 100); fill.style.width = p + '%'; st.textContent = p + '% of ' + fmtSize(e.total); } };
+      x.onload = () => {
+        if (x.status === 200) { row.classList.add('done'); fill.style.width = '100%'; st.textContent = 'Uploaded ' + fmtSize(file.size); setTimeout(() => row.remove(), 4000); }
+        else { row.classList.add('err'); try { st.textContent = JSON.parse(x.responseText).error; } catch { st.textContent = 'Upload failed (' + x.status + ')'; } }
+        resolve();
+      };
+      x.onerror = () => { row.classList.add('err'); st.textContent = 'Connection lost'; resolve(); };
+      x.send(file);
+    });
+  }
+
+  async function uploadAll(files) {
+    if (!files.length) return;
+    for (const f of files) await upload(f);
+    load();
+  }
+
+  // Upload button and drag-and-drop
+  $('upload-btn').addEventListener('click', () => $('file-input').click());
+  $('file-input').addEventListener('change', (e) => { uploadAll([...e.target.files]); e.target.value = ''; });
+  const drop = $('drop'); let depth = 0;
+  window.addEventListener('dragenter', (e) => { if ([...e.dataTransfer.types].includes('Files')) { e.preventDefault(); depth++; drop.classList.add('dragging'); } });
+  window.addEventListener('dragleave', () => { if (--depth <= 0) { depth = 0; drop.classList.remove('dragging'); } });
+  window.addEventListener('dragover', (e) => e.preventDefault());
+  window.addEventListener('drop', (e) => { e.preventDefault(); depth = 0; drop.classList.remove('dragging'); uploadAll([...e.dataTransfer.files].filter((f) => f.size > 0 || f.type)); });
+
+  // Download current folder
+  $('zip-btn').addEventListener('click', () => { location.href = api('/api/download', { path: cwd }); });
+
+  // New folder
+  const md = $('mkdir-dialog');
+  $('mkdir-btn').addEventListener('click', () => { $('mkdir-name').value = ''; md.showModal(); });
+  $('mkdir-cancel').addEventListener('click', () => md.close());
+  $('mkdir-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const name = $('mkdir-name').value.trim(); if (!name) return;
+    const r = await fetch(api('/api/mkdir', { path: cwd, name }), { method: 'POST', headers: W });
+    md.close();
+    if (r.ok) { toast('Created ' + name); load(); } else { toast((await r.json()).error); }
+  });
+
+  // Delete
+  const dd = $('del-dialog'); let pending = null;
+  function askDelete(path, isDir) {
+    pending = path;
+    $('del-text').textContent = isDir ? `Delete the folder ${path} and everything in it?` : `Delete ${path}?`;
+    dd.showModal();
+  }
+  $('del-cancel').addEventListener('click', () => dd.close());
+  $('del-form').addEventListener('submit', async (e) => {
+    e.preventDefault(); dd.close();
+    const r = await fetch(api('/api/delete', { path: pending }), { method: 'POST', headers: W });
+    if (r.ok) { toast('Deleted ' + pending.split('/').pop()); load(); } else { toast((await r.json()).error); }
+  });
+
+  window.addEventListener('hashchange', () => { cwd = decodeURIComponent(location.hash.slice(1)); load(); });
+  load();
+})();
+</script>
+</body>
+</html>
