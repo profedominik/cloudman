@@ -71,7 +71,7 @@ The file manager runs as the `cloudman` user, can only reach `/home/cloudman`
 (paths that try to escape it are refused), and its write actions require a
 custom header so other websites can't trigger them from your browser.
 
-The terminal page's "Open terminal" link assumes the terminal is on port 7681 of
+The file manager's "Open terminal" link assumes the terminal is on port 7681 of
 the same host. Behind a tunnel or reverse proxy with other hostnames, open the
 terminal's own address instead.
 
